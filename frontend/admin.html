@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Selfie Station — Admin</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#000000; --surface:#0a0a0b; --fg:#f5f5f7; --fg-dim:rgba(245,245,247,0.55); --accent: oklch(0.82 0.14 210); --danger: oklch(0.72 0.18 25); }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,sans-serif;min-height:100vh}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel">
+function AdminApp() {
+  const API_BASE = window.location.origin.includes('localhost') 
+    ? 'http://localhost:3000'
+    : 'https://api.yourbranding.com';
+
+  const [activeSession, setActiveSession] = React.useState(null);
+  const [sessionHistory, setSessionHistory] = React.useState([]);
+  const [qrCode, setQrCode] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState(null);
+
+  const startSession = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/session/start`, { method: 'POST' });
+      if (!res.ok) throw new Error('Failed to start session');
+      const data = await res.json();
+      const guestUrl = `${window.location.origin}/guest.html?session=${data.sessionId}`;
+      setActiveSession({
+        id: data.sessionId,
+        expiresIn: data.expiresIn,
+        guestUrl,
+        createdAt: new Date(),
+      });
+      setQrCode(data.qrCode);
+      setSessionHistory([{ id: data.sessionId, startTime: new Date() }, ...sessionHistory]);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const endSession = async (sessionId) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/session/${sessionId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to end session');
+      if (activeSession?.id === sessionId) setActiveSession(null);
+      setQrCode(null);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (!activeSession) return;
+    const countdown = setInterval(() => {
+      setActiveSession(prev => {
+        if (!prev) return null;
+        const newExpires = prev.expiresIn - 1;
+        if (newExpires <= 0) {
+          clearInterval(countdown);
+          return null;
+        }
+        return { ...prev, expiresIn: newExpires };
+      });
+    }, 1000);
+    return () => clearInterval(countdown);
+  }, [activeSession]);
+
+  return (
+    <div style={{ maxWidth:1200, margin:'0 auto', padding:'40px 20px' }}>
+      <div style={{ marginBottom:40 }}>
+        <h1 style={{ margin:0, fontSize:32, fontWeight:600 }}>Selfie Station Admin</h1>
+        <p style={{ color:'var(--fg-dim)', margin:'10px 0 0' }}>Manage active sessions and displays</p>
+      </div>
+
+      {error && (
+        <div style={{
+          padding:16, background:'rgba(255,100,100,0.1)',
+          border:'1px solid var(--danger)', borderRadius:12,
+          color:'var(--danger)', marginBottom:20, fontSize:14
+        }}>
+          {error}
+        </div>
+      )}
+
+      {/* Start button */}
+      <div style={{ marginBottom:40 }}>
+        <button
+          onClick={startSession}
+          disabled={loading || !!activeSession}
+          style={{
+            padding:'16px 32px', background: activeSession ? 'rgba(255,255,255,0.1)' : 'var(--accent)',
+            color: activeSession ? 'rgba(245,245,247,0.4)' : '#000',
+            borderRadius:999, fontWeight:600, border:'none',
+            fontSize:16, cursor: activeSession ? 'default' : 'pointer',
+          }}
+        >
+          {loading ? 'Starting...' : activeSession ? 'Session active' : 'Start new session'}
+        </button>
+      </div>
+
+      {/* Active session card */}
+      {activeSession && (
+        <div style={{
+          padding:24, background:'var(--surface)', border:'1px solid rgba(255,255,255,0.08)',
+          borderRadius:16, marginBottom:40,
+        }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:40 }}>
+            {/* QR Code */}
+            <div>
+              <h2 style={{ margin:'0 0 16px 0', fontSize:18, fontWeight:600 }}>Scan to join</h2>
+              {qrCode && (
+                <div style={{ padding:16, background:'#fff', borderRadius:12, width:'fit-content' }}>
+                  <img src={qrCode} alt="Session QR" style={{ width:220, height:220, display:'block' }} />
+                </div>
+              )}
+              <p className="mono" style={{ fontSize:10, color:'var(--fg-dim)', margin:'12px 0 0', letterSpacing:1.2 }}>
+                {activeSession.id}
+              </p>
+            </div>
+
+            {/* Session info */}
+            <div>
+              <h2 style={{ margin:'0 0 16px 0', fontSize:18, fontWeight:600 }}>Session status</h2>
+              <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                <div>
+                  <div className="mono" style={{ fontSize:10, color:'var(--fg-dim)', letterSpacing:1.2 }}>TIME REMAINING</div>
+                  <div style={{ fontSize:24, fontWeight:600, marginTop:4, color: activeSession.expiresIn < 60 ? 'var(--danger)' : 'var(--accent)' }}>
+                    {String(Math.floor(activeSession.expiresIn / 60)).padStart(2, '0')}:{String(activeSession.expiresIn % 60).padStart(2, '0')}
+                  </div>
+                </div>
+                <div>
+                  <div className="mono" style={{ fontSize:10, color:'var(--fg-dim)', letterSpacing:1.2 }}>GUEST URL</div>
+                  <code style={{
+                    fontSize:12, padding:8, background:'rgba(255,255,255,0.05)',
+                    borderRadius:8, marginTop:4, display:'block', wordBreak:'break-all',
+                    color:'var(--accent)', fontFamily:'JetBrains Mono',
+                  }}>{activeSession.guestUrl}</code>
+                </div>
+              </div>
+              <button
+                onClick={() => endSession(activeSession.id)}
+                disabled={loading}
+                style={{
+                  marginTop:16, padding:'12px 20px', background:'var(--danger)',
+                  color:'#fff', borderRadius:8, border:'none', fontWeight:600,
+                  cursor:'pointer', fontSize:14,
+                }}
+              >
+                End session
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Big screen iframe */}
+      {activeSession && (
+        <div>
+          <h2 style={{ margin:'0 0 16px 0', fontSize:18, fontWeight:600 }}>Big screen preview</h2>
+          <div style={{
+            position:'relative', height:'min(80vh, 860px)', aspectRatio:'9/16',
+            margin:'0 auto',
+            borderRadius:14, overflow:'hidden',
+            border:'1px solid rgba(255,255,255,0.08)',
+            boxShadow:'0 40px 120px -40px rgba(0,0,0,0.9)',
+          }}>
+            <iframe
+              src={`/display.html?session=${activeSession.id}`}
+              style={{
+                width:'100%', height:'100%', border:'none', display:'block'
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {!activeSession && (
+        <div style={{
+          padding:60, textAlign:'center', color:'var(--fg-dim)',
+        }}>
+          <p style={{ fontSize:16, margin:0 }}>No active session</p>
+          <p style={{ fontSize:14, margin:'8px 0 0' }}>Start a new session to begin</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<AdminApp/>);
+</script>
+</body>
+</html>

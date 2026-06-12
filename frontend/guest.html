@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Selfie Station — Guest</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#000000;
+    --fg:#f5f5f7;
+    --fg-dim:rgba(245,245,247,0.55);
+    --accent: oklch(0.82 0.14 210);
+    --danger: oklch(0.72 0.18 25);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,sans-serif;overflow-x:hidden;min-height:100vh}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-feature-settings:"ss01","cv11"}
+  button{font-family:inherit;color:inherit;background:none;border:none;cursor:pointer;padding:0}
+  ::selection{background:var(--accent);color:#000}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel">
+// Signature pad component (from original)
+function SignaturePad({ onChange, color = "#f5f5f7", thickness = 3 }) {
+  const canvasRef = React.useRef(null);
+  const wrapRef = React.useRef(null);
+  const [strokes, setStrokes] = React.useState([]);
+  const drawing = React.useRef(false);
+  const current = React.useRef([]);
+
+  const redraw = React.useCallback(() => {
+    const c = canvasRef.current; if (!c) return;
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0,0,c.width,c.height);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = color; ctx.lineWidth = thickness * (c.width / 600);
+    const all = [...strokes, current.current].filter(s => s && s.length);
+    for (const stroke of all) {
+      if (stroke.length < 2) continue;
+      ctx.beginPath();
+      ctx.moveTo(stroke[0].x, stroke[0].y);
+      for (let i = 1; i < stroke.length; i++) {
+        const p = stroke[i], prev = stroke[i-1];
+        const mx = (prev.x + p.x) / 2, my = (prev.y + p.y) / 2;
+        ctx.quadraticCurveTo(prev.x, prev.y, mx, my);
+      }
+      ctx.stroke();
+    }
+  }, [strokes, color, thickness]);
+
+  React.useEffect(() => {
+    const resize = () => {
+      const c = canvasRef.current, w = wrapRef.current;
+      if (!c || !w) return;
+      const r = w.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      c.width = r.width * dpr; c.height = r.height * dpr;
+      c.style.width = r.width + 'px'; c.style.height = r.height + 'px';
+      const ctx = c.getContext('2d'); ctx.scale(dpr, dpr);
+      redraw();
+    };
+    resize();
+    window.addEventListener('resize', resize);
+    return () => window.removeEventListener('resize', resize);
+  }, [redraw]);
+
+  React.useEffect(() => { redraw(); }, [redraw]);
+
+  const ptFromEvent = (e) => {
+    const c = canvasRef.current; const r = c.getBoundingClientRect();
+    const t = e.touches && e.touches[0];
+    const clientX = t ? t.clientX : e.clientX;
+    const clientY = t ? t.clientY : e.clientY;
+    return { x: clientX - r.left, y: clientY - r.top };
+  };
+
+  const start = (e) => { e.preventDefault(); drawing.current = true; current.current = [ptFromEvent(e)]; redraw(); };
+  const move = (e) => { if (!drawing.current) return; e.preventDefault(); current.current.push(ptFromEvent(e)); redraw(); };
+  const end = () => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    const stroke = current.current;
+    current.current = [];
+    if (stroke.length < 2) return;
+    const next = [...strokes, stroke];
+    setStrokes(next);
+    emit(next);
+  };
+
+  const emit = (allStrokes) => {
+    if (!onChange) return;
+    if (!allStrokes.length) { onChange(null); return; }
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    for (const s of allStrokes) for (const p of s) {
+      if (p.x<minX)minX=p.x; if (p.y<minY)minY=p.y;
+      if (p.x>maxX)maxX=p.x; if (p.y>maxY)maxY=p.y;
+    }
+    const pad = 8;
+    minX-=pad; minY-=pad; maxX+=pad; maxY+=pad;
+    const w = Math.max(10, maxX-minX), h = Math.max(10, maxY-minY);
+    let d = '';
+    for (const s of allStrokes) {
+      if (s.length < 2) continue;
+      d += `M ${(s[0].x-minX).toFixed(1)} ${(s[0].y-minY).toFixed(1)} `;
+      for (let i = 1; i < s.length; i++) {
+        const p = s[i], prev = s[i-1];
+        const mx = (prev.x + p.x) / 2, my = (prev.y + p.y) / 2;
+        d += `Q ${(prev.x-minX).toFixed(1)} ${(prev.y-minY).toFixed(1)} ${(mx-minX).toFixed(1)} ${(my-minY).toFixed(1)} `;
+      }
+    }
+    onChange({ d, width: w, height: h, strokes: allStrokes.length });
+  };
+
+  const clear = () => { setStrokes([]); current.current = []; if (onChange) onChange(null); };
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+      <div
+        ref={wrapRef}
+        style={{
+          position:'relative',
+          aspectRatio:'2/1',
+          width:'100%',
+          background:'#0d0d10',
+          border:'1px solid rgba(255,255,255,0.12)',
+          borderRadius:14,
+          overflow:'hidden',
+          touchAction:'none',
+        }}
+        onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end}
+        onTouchStart={start} onTouchMove={move} onTouchEnd={end}
+      >
+        <canvas ref={canvasRef} style={{ display:'block', width:'100%', height:'100%' }} />
+        {strokes.length === 0 && (
+          <div style={{
+            position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center',
+            color:'rgba(245,245,247,0.35)', fontSize:13, pointerEvents:'none',
+          }}>
+            <span className="mono">Sign with your finger</span>
+          </div>
+        )}
+      </div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <span className="mono" style={{ fontSize:11, color:'rgba(245,245,247,0.4)' }}>
+          {strokes.length ? `${strokes.length} STROKE${strokes.length===1?'':'S'}` : 'EMPTY'}
+        </span>
+        <button onClick={clear} disabled={!strokes.length} className="mono" style={{
+          fontSize:11, color: strokes.length ? 'var(--fg-dim)' : 'rgba(245,245,247,0.2)',
+          padding:'6px 10px', border:'1px solid rgba(255,255,255,0.1)', borderRadius:999,
+          cursor: strokes.length ? 'pointer':'default',
+        }}>Clear</button>
+      </div>
+    </div>
+  );
+}
+
+// Main guest app
+function GuestApp() {
+  const API_BASE = window.location.origin.includes('localhost') 
+    ? 'http://localhost:3000'
+    : 'https://api.yourbranding.com'; // change this to your API
+
+  const params = new URLSearchParams(window.location.search);
+  const sessionId = params.get('session');
+  
+  const [screen, setScreen] = React.useState('landing'); // landing|upload|sign|done|error
+  const [selectedPhoto, setSelectedPhoto] = React.useState(null);
+  const [pendingSignature, setPendingSignature] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!sessionId) setError('Invalid session');
+  }, [sessionId]);
+
+  const handleUpload = (file) => {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      setSelectedPhoto(reader.result);
+      setLoading(true);
+      setError(null);
+      try {
+        const formData = new FormData();
+        formData.append('photo', file);
+        const res = await fetch(`${API_BASE}/api/session/${sessionId}/upload`, {
+          method: 'POST',
+          body: formData,
+        });
+        if (!res.ok) throw new Error('Upload failed');
+        setScreen('sign');
+      } catch (e) {
+        setError(e.message);
+        setSelectedPhoto(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmitSignature = async () => {
+    if (!pendingSignature) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/session/${sessionId}/signature`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          d: pendingSignature.d,
+          width: pendingSignature.width,
+          height: pendingSignature.height,
+          handle: null,
+        }),
+      });
+      if (!res.ok) throw new Error('Submit failed');
+      setScreen('done');
+      setPendingSignature(null);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (error) {
+    return (
+      <div style={{ padding:20, textAlign:'center', marginTop:'20vh' }}>
+        <h1 style={{ color:'var(--danger)' }}>Error</h1>
+        <p>{error}</p>
+        <button onClick={() => window.location.reload()} style={{
+          padding:'10px 20px', background:'var(--accent)', color:'#000', borderRadius:8,
+          fontWeight:500, cursor:'pointer', border:'none'
+        }}>Reload</button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding:'20px', maxWidth:400, margin:'0 auto', minHeight:'100vh', display:'flex', flexDirection:'column' }}>
+      <div style={{ flex:1, display:'flex', flexDirection:'column', justifyContent:'center', gap:20 }}>
+        {screen === 'landing' && (
+          <>
+            <h1 style={{ fontSize:28, fontWeight:500, margin:0 }}>You're in.</h1>
+            <p style={{ color:'var(--fg-dim)', margin:0 }}>Pick a photo, sign it, then turn around and pose in front of the big screen.</p>
+            <button onClick={() => setScreen('upload')} style={{
+              padding:'16px', background:'var(--accent)', color:'#000', borderRadius:999,
+              fontWeight:600, cursor:'pointer', border:'none', fontSize:16,
+            }}>Choose photo</button>
+            <div className="mono" style={{ fontSize:10, color:'rgba(245,245,247,0.35)', textAlign:'center' }}>
+              Session {sessionId} · Auto-deleted in 5:00
+            </div>
+          </>
+        )}
+
+        {screen === 'upload' && (
+          <>
+            <h1 style={{ fontSize:28, fontWeight:500, margin:0 }}>Pick your background</h1>
+            <input type="file" accept="image/*" onChange={e => e.target.files && handleUpload(e.target.files[0])} style={{
+              padding:'16px', border:'1px dashed rgba(255,255,255,0.2)', borderRadius:12,
+              background:'transparent', color:'var(--fg)', cursor:'pointer'
+            }} />
+            <button onClick={() => setScreen('landing')} className="mono" style={{
+              fontSize:11, color:'rgba(245,245,247,0.5)', background:'transparent', cursor:'pointer'
+            }}>← Back</button>
+          </>
+        )}
+
+        {screen === 'sign' && (
+          <>
+            <h1 style={{ fontSize:28, fontWeight:500, margin:0 }}>Sign it</h1>
+            {selectedPhoto && (
+              <img src={selectedPhoto} alt="" style={{ width:'100%', maxHeight:120, objectFit:'cover', borderRadius:8 }} />
+            )}
+            <SignaturePad onChange={setPendingSignature} />
+            <button 
+              onClick={handleSubmitSignature} 
+              disabled={!pendingSignature || loading}
+              style={{
+                padding:'16px', background: (!pendingSignature || loading) ? 'rgba(255,255,255,0.1)' : 'var(--accent)',
+                color: (!pendingSignature || loading) ? 'rgba(245,245,247,0.4)' : '#000',
+                borderRadius:999, fontWeight:600, cursor: (!pendingSignature || loading) ? 'default' : 'pointer',
+                border:'none', fontSize:16,
+              }}
+            >
+              {loading ? 'Sending...' : 'Send to big screen'}
+            </button>
+          </>
+        )}
+
+        {screen === 'done' && (
+          <>
+            <div style={{ textAlign:'center' }}>
+              <div style={{ fontSize:48, margin:'20px 0', color:'var(--accent)' }}>✓</div>
+              <h1 style={{ fontSize:28, fontWeight:500, margin:0 }}>You're on screen</h1>
+              <p style={{ color:'var(--fg-dim)', margin:'10px 0 0' }}>Turn around and take your selfie.</p>
+              <p className="mono" style={{ fontSize:10, color:'rgba(245,245,247,0.35)', margin:'20px 0 0' }}>
+                Photo & signature deleted when session ends
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<GuestApp/>);
+</script>
+</body>
+</html>

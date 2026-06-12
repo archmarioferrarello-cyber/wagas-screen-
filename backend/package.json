@@ -1,0 +1,21 @@
+{
+  "name": "selfie-station-backend",
+  "version": "1.0.0",
+  "description": "Selfie Station API - session management for kiosk system",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "multer": "^1.4.5-lts.1",
+    "redis": "^4.6.5",
+    "uuid": "^9.0.0",
+    "qrcode": "^1.5.3"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}
