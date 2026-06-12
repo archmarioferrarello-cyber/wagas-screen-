@@ -30,6 +30,14 @@ const upload = multer({
   limits: { fileSize: parseInt(process.env.MAX_PHOTO_SIZE) || 10 * 1024 * 1024 }
 });
 
+// Serve static frontend files
+app.use(express.static(__dirname + '/../frontend'));
+
+// Root route - serve display.html
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/../frontend/display.html');
+});
+
 // ===== HELPERS =====
 
 const getSession = async (sessionId) => {
