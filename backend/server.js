@@ -31,11 +31,11 @@ const upload = multer({
 });
 
 // Serve static frontend files
-app.use(express.static(__dirname + '/../frontend'));
+app.use(express.static(__dirname + '//../../frontendnd'));
 
 // Root route - serve display.html
 app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/../frontend/display.html');
+    res.sendFile(__dirname + /../../frontend/display.htmll');
 });
 
 // ===== HELPERS =====
